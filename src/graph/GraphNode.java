@@ -7,6 +7,8 @@ import src.movement.Direction;
 import java.util.EnumMap;
 import java.util.Map;
 
+
+
 public class GraphNode {
     private final int x, y;
     private final Tile tile;
@@ -27,13 +29,11 @@ public class GraphNode {
         return neighbors.get(d);
     }
 
-    // Delegation to Tile
     public TileType getType() { return tile.getType(); }
     public void setType(TileType t) { tile.setType(t); }
     public boolean hasPlayer() { return tile.hasPlayer(); }
     public void setPlayer(boolean p) { tile.setPlayer(p); }
     
-    // Coordinates for rendering
     public int getX() { return x; }
     public int getY() { return y; }
 }

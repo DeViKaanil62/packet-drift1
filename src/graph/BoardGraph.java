@@ -6,17 +6,19 @@ import src.movement.Direction;
 import java.util.ArrayList;
 import java.util.List;
 
+
+
 public class BoardGraph {
     private GraphNode playerNode;
     private List<GraphNode> allNodes;
     private int width, height;
-    private int totalGems;
+    private int totalData; 
 
     public BoardGraph(String layout, int w, int h) {
         this.width = w;
         this.height = h;
         this.allNodes = new ArrayList<>();
-        this.totalGems = 0;
+        this.totalData = 0;
         initialize(layout);
     }
 
@@ -30,11 +32,11 @@ public class BoardGraph {
                 TileType type = parseChar(chars[y * width + x]);
                 GraphNode node = new GraphNode(x, y, type);
                 
-                if (type == TileType.GEM) totalGems++;
+                if (type == TileType.DATA) totalData++;
                 if (type == TileType.START) {
                     playerNode = node;
                     playerNode.setPlayer(true);
-                    node.setType(TileType.STOP);
+                    node.setType(TileType.HUB); // Start acts as a Hub
                 }
 
                 tempGrid[y][x] = node;
@@ -59,10 +61,10 @@ public class BoardGraph {
 
     private TileType parseChar(char c) {
         switch (c) {
-            case 'w': return TileType.WALL;
-            case 'g': return TileType.GEM;
-            case 'm': return TileType.MINE;
-            case 's': return TileType.STOP;
+            case 'w': return TileType.FIREWALL;
+            case 'g': return TileType.DATA;     
+            case 'm': return TileType.VIRUS;    
+            case 's': return TileType.HUB;      
             case 'S': return TileType.START;
             case 'b': return TileType.BLANK;
             default: return TileType.BLANK;
@@ -72,6 +74,6 @@ public class BoardGraph {
     public GraphNode getPlayerNode() { return playerNode; }
     public void setPlayerNode(GraphNode node) { this.playerNode = node; }
     public List<GraphNode> getAllNodes() { return allNodes; }
-    public int getTotalGems() { return totalGems; }
-    public void decreaseGemCount() { totalGems--; }
+    public int getTotalData() { return totalData; }
+    public void decreaseDataCount() { totalData--; }
 }
