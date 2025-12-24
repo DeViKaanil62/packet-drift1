@@ -1,5 +1,7 @@
 package src.movement;
 
+
+
 import src.board.TileType;
 import src.graph.BoardGraph;
 import src.graph.GraphNode;
@@ -10,32 +12,32 @@ public class SlideSimulator {
         GraphNode current = graph.getPlayerNode();
         GraphNode next = current.getNeighbor(dir);
 
-        // Check if move is possible
-        if (next == null || next.getType() == TileType.WALL) {
+        
+        if (next == null || next.getType() == TileType.FIREWALL) {
             return new MoveResult(false, false, 0);
         }
 
         current.setPlayer(false);
-        int gemsCollected = 0;
-        boolean died = false;
+        int dataCollected = 0;
+        boolean crashed = false;
 
-        // Slide Physics Loop
+        
         while (true) {
             current = next;
 
-            if (current.getType() == TileType.GEM) {
+            if (current.getType() == TileType.DATA) {
                 current.setType(TileType.BLANK);
-                graph.decreaseGemCount();
-                gemsCollected++;
-            } else if (current.getType() == TileType.MINE) {
-                died = true;
+                graph.decreaseDataCount();
+                dataCollected++;
+            } else if (current.getType() == TileType.VIRUS) {
+                crashed = true;
                 break;
             }
 
-            if (current.getType() == TileType.STOP) break;
+            if (current.getType() == TileType.HUB) break;
 
             GraphNode lookAhead = current.getNeighbor(dir);
-            if (lookAhead == null || lookAhead.getType() == TileType.WALL) {
+            if (lookAhead == null || lookAhead.getType() == TileType.FIREWALL) {
                 break;
             }
             next = lookAhead;
@@ -44,6 +46,6 @@ public class SlideSimulator {
         current.setPlayer(true);
         graph.setPlayerNode(current);
         
-        return new MoveResult(true, died, gemsCollected);
+        return new MoveResult(true, crashed, dataCollected);
     }
 }
