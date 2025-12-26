@@ -44,7 +44,7 @@ cd src
 
 **4. Compile all Java files**
 ```bash
-javac -d .. *.java board\*.java graph\*.java movement\*.java player\*.java cpu\*.java
+javac -d . src\*.java src\board\*.java src\graph\*.java src\movement\*.java src\player\*.java src\cpu\*.java src\ui\*.java
 ```
 
 **5. Run the game**
