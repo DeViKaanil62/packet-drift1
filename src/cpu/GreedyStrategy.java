@@ -11,7 +11,11 @@ public class GreedyStrategy {
 
     private static final int DATA_VALUE = 100;
     private static final int DEATH_PENALTY = 99999;
+    private static final int K_CLOSEST_FOR_CLUSTER = 3; // tune: 2–4 works well
 
+    /**
+     * Simulates a full slide in one direction without modifying the real board.
+     */
     private static class SimulationResult {
         GraphNode endNode;
         int dataCollected;
@@ -47,29 +51,47 @@ public class GreedyStrategy {
                 hitsVirus = true;
             }
 
-            if (current.getType() == TileType.HUB) break;
+            if (current.getType() == TileType.HUB) {
+                break;
+            }
 
             next = current.getNeighbor(dir);
-            if (next == null || next.getType() == TileType.FIREWALL) break;
+            if (next == null || next.getType() == TileType.FIREWALL) {
+                break;
+            }
         }
 
         return new SimulationResult(current, dataCollected, hitsVirus, collectedNodes);
     }
 
-    // ================== D&C CLOSEST PAIR DISTANCE ==================
-    private double distanceToNearestData(BoardGraph graph, GraphNode from, Set<GraphNode> exclude) {
-        List<DCClosestPair.Point> dataPoints = new ArrayList<>();
+    /**
+     * Computes average distance to the k-closest remaining data points using D&C preprocessing.
+     */
+    private double distanceToNearestCluster(BoardGraph graph, GraphNode from, Set<GraphNode> exclude) {
+        List<DCClusterDistance.Point> dataPoints = new ArrayList<>();
 
         for (GraphNode node : graph.getAllNodes()) {
             if (node.getType() == TileType.DATA && !exclude.contains(node)) {
-                dataPoints.add(new DCClosestPair.Point(node.getX(), node.getY()));
+                dataPoints.add(new DCClusterDistance.Point(node.getX(), node.getY()));
             }
         }
 
-        return DCClosestPair.findMinDistance(dataPoints, from.getX(), from.getY());
+        if (dataPoints.isEmpty()) {
+            return 0.0;
+        }
+
+        return DCClusterDistance.averageDistanceToKClosest(
+                dataPoints,
+                from.getX(),
+                from.getY(),
+                K_CLOSEST_FOR_CLUSTER
+        );
     }
 
-    // ================== MAIN GREEDY LOGIC ==================
+    /**
+     * Returns the best direction according to the enhanced greedy heuristic:
+     * H = (dataCollected × 100) − average_distance_to_k_closest_data
+     */
     public Direction getBestDirection(BoardGraph graph) {
         GraphNode playerNode = graph.getPlayerNode();
         Direction bestDir = null;
@@ -78,19 +100,25 @@ public class GreedyStrategy {
         for (Direction dir : Direction.ALL) {
             SimulationResult sim = simulateSlide(graph, playerNode, dir);
 
+            // Blocked/invalid move
             if (sim.endNode == playerNode && sim.dataCollected == 0) {
                 continue;
             }
 
-            double score = sim.hitsVirus ?
-                    -DEATH_PENALTY :
-                    sim.dataCollected * DATA_VALUE - distanceToNearestData(graph, sim.endNode, sim.collectedNodes);
+            double score;
+            if (sim.hitsVirus) {
+                score = -DEATH_PENALTY;
+            } else {
+                double avgClusterDist = distanceToNearestCluster(graph, sim.endNode, sim.collectedNodes);
+                score = sim.dataCollected * DATA_VALUE - avgClusterDist;
+            }
 
             if (score > bestScore) {
                 bestScore = score;
                 bestDir = dir;
             }
         }
+
         return bestDir;
     }
 }
