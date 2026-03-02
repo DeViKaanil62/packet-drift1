@@ -14,82 +14,61 @@ public class DPDepthSolver {
 
     private static final int DATA_VALUE = 100;
     private static final int DEATH_PENALTY = 99999;
+    private static final int MAX_DEPTH = 5;  // Increased – stronger prediction
 
     /**
-     * Memoized recursive function:
-     * Returns maximum achievable score from this node within depthLeft moves.
+     * Minimax DP: CPU maximizes, assumes Human minimizes CPU's score.
+     * isCpuTurn=true → maximize (CPU turn)
+     * isCpuTurn=false → minimize (Human turn, predicts opponent blocks)
      */
-    public double dpMaxFrom(BoardGraph graph,
+    public double dpMinimax(BoardGraph graph,
                             GraphNode currentNode,
-                            int depthLeft) {
+                            int depthLeft,
+                            boolean isCpuTurn) {
 
-        //  Base Case
         if (depthLeft == 0) {
             return 0;
         }
 
-        //  DP Key
-        String key = currentNode.getX() + ","
-                   + currentNode.getY() + ","
-                   + depthLeft;
+        String key = currentNode.getX() + "," + currentNode.getY() + "," + depthLeft + "," + (isCpuTurn ? "1" : "0");
 
-        // Memo Check
         if (dpTable.containsKey(key)) {
             return dpTable.get(key);
         }
 
-        double bestScore = Double.NEGATIVE_INFINITY;
+        double bestScore = isCpuTurn ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
 
-        // Try all 8 directions
         for (Direction dir : Direction.ALL) {
+            SimulationResult sim = simulateSlide(graph, currentNode, dir);
 
-            SimulationResult sim =
-                    simulateSlide(graph, currentNode, dir);
-
-            // Invalid move (blocked)
-            if (sim.endNode == currentNode
-                && sim.dataCollected == 0) {
+            if (sim.endNode == currentNode && sim.dataCollected == 0) {
                 continue;
             }
 
-            double immediateScore;
+            double immediateScore = sim.hitsVirus ? -DEATH_PENALTY : sim.dataCollected * DATA_VALUE;
 
-            if (sim.hitsVirus) {
-                immediateScore = -DEATH_PENALTY;
+            double futureScore = dpMinimax(graph, sim.endNode, depthLeft - 1, !isCpuTurn);
+
+            double total = immediateScore + futureScore;
+
+            if (isCpuTurn) {
+                bestScore = Math.max(bestScore, total);
             } else {
-                immediateScore = sim.dataCollected * DATA_VALUE;
+                bestScore = Math.min(bestScore, total);
             }
-
-            double futureScore =
-                    immediateScore
-                    + dpMaxFrom(graph,
-                                sim.endNode,
-                                depthLeft - 1);
-
-            bestScore = Math.max(bestScore, futureScore);
         }
 
-        if (bestScore == Double.NEGATIVE_INFINITY) {
+        if (bestScore == Double.NEGATIVE_INFINITY || bestScore == Double.POSITIVE_INFINITY) {
             bestScore = 0;
         }
 
-        // Store in DP table
         dpTable.put(key, bestScore);
-
         return bestScore;
     }
 
-    /**
-     * Slide simulation (copied from GreedyStrategy)
-     */
-    private SimulationResult simulateSlide(BoardGraph graph,
-                                           GraphNode start,
-                                           Direction dir) {
-
+    private SimulationResult simulateSlide(BoardGraph graph, GraphNode start, Direction dir) {
         GraphNode next = start.getNeighbor(dir);
-
-        if (next == null
-            || next.getType() == TileType.FIREWALL) {
+        if (next == null || next.getType() == TileType.FIREWALL) {
             return new SimulationResult(start, 0, false);
         }
 
@@ -108,21 +87,14 @@ public class DPDepthSolver {
                 hitsVirus = true;
             }
 
-            if (current.getType() == TileType.HUB) {
-                break;
-            }
+            if (current.getType() == TileType.HUB) break;
 
             next = current.getNeighbor(dir);
 
-            if (next == null
-                || next.getType() == TileType.FIREWALL) {
-                break;
-            }
+            if (next == null || next.getType() == TileType.FIREWALL) break;
         }
 
-        return new SimulationResult(current,
-                                    dataCollected,
-                                    hitsVirus);
+        return new SimulationResult(current, dataCollected, hitsVirus);
     }
 
     private static class SimulationResult {
@@ -130,9 +102,7 @@ public class DPDepthSolver {
         int dataCollected;
         boolean hitsVirus;
 
-        SimulationResult(GraphNode endNode,
-                         int dataCollected,
-                         boolean hitsVirus) {
+        SimulationResult(GraphNode endNode, int dataCollected, boolean hitsVirus) {
             this.endNode = endNode;
             this.dataCollected = dataCollected;
             this.hitsVirus = hitsVirus;
