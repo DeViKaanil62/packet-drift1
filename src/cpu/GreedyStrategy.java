@@ -12,7 +12,7 @@ public class GreedyStrategy {
     private static final int DATA_VALUE = 100;
     private static final int DEATH_PENALTY = 99999;
     private static final int LOOKAHEAD_DEPTH = 4;          // tunable: 3–6 usually good
-    private static final double CLUSTER_PENALTY_WEIGHT = 12.0;  // ← tune this (5–20 range)
+    private static final double CLUSTER_PENALTY_WEIGHT = 12.0;  // tune: 5–20 range
 
     private static class SimulationResult {
         GraphNode endNode;
@@ -28,9 +28,6 @@ public class GreedyStrategy {
         }
     }
 
-    // ────────────────────────────────────────────────
-    //  RESTORED: Original slide simulation (same as before)
-    // ────────────────────────────────────────────────
     private SimulationResult simulateSlide(BoardGraph graph, GraphNode start, Direction dir) {
         GraphNode next = start.getNeighbor(dir);
         if (next == null || next.getType() == TileType.FIREWALL) {
@@ -61,9 +58,6 @@ public class GreedyStrategy {
         return new SimulationResult(current, dataCollected, hitsVirus, collectedNodes);
     }
 
-    // ────────────────────────────────────────────────
-    //  RESTORED: Cluster distance (divide & conquer part)
-    // ────────────────────────────────────────────────
     private double distanceToCluster(BoardGraph graph, GraphNode from, Set<GraphNode> exclude) {
         List<DCClusterDistance.Point> dataPoints = new ArrayList<>();
 
@@ -79,83 +73,46 @@ public class GreedyStrategy {
                 dataPoints,
                 from.getX(),
                 from.getY(),
-                2  // K_CLOSEST_FOR_CLUSTER = 2 as in original
+                3  // k=3
         );
     }
 
-    // =============================================
-    //  Backtracking Recursion & State Exploration
-    // =============================================
-    
-
-    private double getBestFutureScore(
-            BoardGraph graph,
-            GraphNode currentPos,
-            int depthLeft,
-            Set<GraphNode> alreadyCollected) {
-
-        if (depthLeft == 0) {
-            return 0.0;
-        }
-
-        double maxFuture = 0.0;
-
-        for (Direction dir : Direction.ALL) {
-            SimulationResult sim = simulateSlide(graph, currentPos, dir);
-
-            // Basic pruning
-            if (sim.endNode == currentPos && sim.dataCollected == 0) continue;
-            if (sim.hitsVirus) continue;
-
-            // Create updated collected set for this path
-            Set<GraphNode> newCollected = new HashSet<>(alreadyCollected);
-            newCollected.addAll(sim.collectedNodes);
-
-            double immediate = sim.dataCollected * DATA_VALUE;
-
-            double future = getBestFutureScore(
-                    graph,
-                    sim.endNode,
-                    depthLeft - 1,
-                    newCollected
-            );
-
-            maxFuture = Math.max(maxFuture, immediate + future);
-        }
-
-        return maxFuture;
-    }
-
-    
+    // DP Solver instance (from Member 1)
+    private final DPDepthSolver dpSolver = new DPDepthSolver();
 
     public Direction getBestDirection(BoardGraph graph) {
         GraphNode playerNode = graph.getPlayerNode();
         Direction bestDir = null;
         double bestScore = Double.NEGATIVE_INFINITY;
 
-        DPDepthSolver dpSolver = new DPDepthSolver();
+        // Minimal DP: memo cache for cluster distance (from Review 2)
+        DPMemoCache memo = new DPMemoCache();
 
+        // For validation/logging
         List<ScoredDirection> scoredDirs = new ArrayList<>();
 
         for (Direction dir : Direction.ALL) {
             SimulationResult sim = simulateSlide(graph, playerNode, dir);
 
             if (sim.endNode == playerNode && sim.dataCollected == 0) {
-                continue; // invalid/no move
+                continue;
             }
 
-            double immediateScore = sim.hitsVirus 
-                    ? -DEATH_PENALTY 
-                    : sim.dataCollected * DATA_VALUE;
+            double immediateScore = sim.hitsVirus ? -DEATH_PENALTY : sim.dataCollected * DATA_VALUE;
 
-            // DP lookahead (long-term exact)
-            double futureScore = dpSolver.dpMaxFrom(graph, sim.endNode, LOOKAHEAD_DEPTH);
+            // DP lookahead (long-term optimal, from Member 1)
+            double futureScore = dpSolver.dpMaxFrom(graph, sim.endNode, LOOKAHEAD_DEPTH - 1);
 
-            // Divide & Conquer heuristic (short/mid-term greediness)
-            double clusterDist = distanceToCluster(graph, sim.endNode, sim.collectedNodes);
+            // D&C cluster heuristic (short/mid-term, from Review 2)
+            double clusterDist = memo.getOrComputeDistance(
+                    graph,
+                    sim.endNode,
+                    sim.collectedNodes,
+                    (g, f, e) -> distanceToCluster(g, f, e)
+            );
             double clusterPenalty = clusterDist * CLUSTER_PENALTY_WEIGHT;
 
-            // Hybrid total
+            // Hybrid total score
             double totalScore = immediateScore + futureScore - clusterPenalty;
 
             scoredDirs.add(new ScoredDirection(dir, totalScore, clusterDist, futureScore));
@@ -166,12 +123,10 @@ public class GreedyStrategy {
             }
         }
 
-        // ────────────────────────────────────────────────
-        // Enhanced logging — shows both components
-        // ────────────────────────────────────────────────
+        // Validation logging (Member 2's part – helps in demo & testing)
         if (!scoredDirs.isEmpty()) {
             scoredDirs.sort((a, b) -> Double.compare(b.score, a.score));
-            System.out.println("Top 3 directions this turn (hybrid DP + cluster):");
+            System.out.println("Top 3 directions this turn (hybrid DP lookahead + cluster):");
             for (int i = 0; i < Math.min(3, scoredDirs.size()); i++) {
                 ScoredDirection sd = scoredDirs.get(i);
                 System.out.printf("%d: %s | total=%.1f | futureDP=%.1f | clusterPenalty=%.1f%n",
