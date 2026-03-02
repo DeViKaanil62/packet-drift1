@@ -11,7 +11,7 @@ public class GreedyStrategy {
 
     private static final int DATA_VALUE = 100;
     private static final int DEATH_PENALTY = 99999;
-    private static final int K_CLOSEST_FOR_CLUSTER = 2; // Average to 2 closest – tunable
+    private static final int LOOKAHEAD_DEPTH = 3; // Tunable: Increase for deeper lookahead (e.g., 5-10 is feasible)
 
     private static class SimulationResult {
         GraphNode endNode;
@@ -57,64 +57,66 @@ public class GreedyStrategy {
         return new SimulationResult(current, dataCollected, hitsVirus, collectedNodes);
     }
 
-    /**
-     * Computes average distance to the K-closest remaining data points (cluster-aware)
-     * Uses D&C preprocessing from DCClusterDistance
-     */
-    private double distanceToCluster(BoardGraph graph, GraphNode from, Set<GraphNode> exclude) {
-        List<DCClusterDistance.Point> dataPoints = new ArrayList<>();
-
-        for (GraphNode node : graph.getAllNodes()) {
-            if (node.getType() == TileType.DATA && !exclude.contains(node)) {
-                dataPoints.add(new DCClusterDistance.Point(node.getX(), node.getY()));
-            }
-        }
-
-        if (dataPoints.isEmpty()) return 0.0;
-
-        return DCClusterDistance.averageDistanceToKClosest(
-                dataPoints,
-                from.getX(),
-                from.getY(),
-                K_CLOSEST_FOR_CLUSTER
-        );
-    }
-
     public Direction getBestDirection(BoardGraph graph) {
         GraphNode playerNode = graph.getPlayerNode();
         Direction bestDir = null;
         double bestScore = Double.NEGATIVE_INFINITY;
 
-        // Minimal DP: memo cache for this turn only
-        DPMemoCache memo = new DPMemoCache();
+        // Instance of DP solver for lookahead
+        DPDepthSolver dpSolver = new DPDepthSolver();
+
+        // For debug/logging: Collect scored directions
+        List<ScoredDirection> scoredDirs = new ArrayList<>();
 
         for (Direction dir : Direction.ALL) {
             SimulationResult sim = simulateSlide(graph, playerNode, dir);
 
             if (sim.endNode == playerNode && sim.dataCollected == 0) {
-                continue;
+                continue; // Invalid move
             }
 
-            double score;
+            double immediateScore;
             if (sim.hitsVirus) {
-                score = -DEATH_PENALTY;
+                immediateScore = -DEATH_PENALTY;
             } else {
-                // Memoized cluster distance (DP reuse within turn)
-                double clusterDist = memo.getOrComputeDistance(
-                        graph,
-                        sim.endNode,
-                        sim.collectedNodes,
-                        (g, f, e) -> distanceToCluster(g, f, e)
-                );
-                score = sim.dataCollected * DATA_VALUE - clusterDist;
+                immediateScore = sim.dataCollected * DATA_VALUE;
             }
 
-            if (score > bestScore) {
-                bestScore = score;
+            // Get future score using DP lookahead from end position
+            double futureScore = dpSolver.dpMaxFrom(graph, sim.endNode, LOOKAHEAD_DEPTH);
+
+            double totalScore = immediateScore + futureScore;
+
+            scoredDirs.add(new ScoredDirection(dir, totalScore));
+
+            if (totalScore > bestScore) {
+                bestScore = totalScore;
                 bestDir = dir;
             }
         }
 
+        // Debug logging: Sort and print top 3 directions
+        if (!scoredDirs.isEmpty()) {
+            scoredDirs.sort((a, b) -> Double.compare(b.score, a.score)); // Descending order
+            System.out.println("Top 3 directions for this turn:");
+            for (int i = 0; i < Math.min(3, scoredDirs.size()); i++) {
+                ScoredDirection sd = scoredDirs.get(i);
+                System.out.println((i + 1) + ": " + sd.dir + " with total score: " + sd.score);
+            }
+        } else {
+            System.out.println("No valid moves available.");
+        }
+
         return bestDir;
+    }
+
+    private static class ScoredDirection {
+        Direction dir;
+        double score;
+
+        ScoredDirection(Direction dir, double score) {
+            this.dir = dir;
+            this.score = score;
+        }
     }
 }
