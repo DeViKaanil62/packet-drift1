@@ -83,6 +83,51 @@ public class GreedyStrategy {
         );
     }
 
+    // =============================================
+    //  Backtracking Recursion & State Exploration
+    // =============================================
+    
+
+    private double getBestFutureScore(
+            BoardGraph graph,
+            GraphNode currentPos,
+            int depthLeft,
+            Set<GraphNode> alreadyCollected) {
+
+        if (depthLeft == 0) {
+            return 0.0;
+        }
+
+        double maxFuture = 0.0;
+
+        for (Direction dir : Direction.ALL) {
+            SimulationResult sim = simulateSlide(graph, currentPos, dir);
+
+            // Basic pruning
+            if (sim.endNode == currentPos && sim.dataCollected == 0) continue;
+            if (sim.hitsVirus) continue;
+
+            // Create updated collected set for this path
+            Set<GraphNode> newCollected = new HashSet<>(alreadyCollected);
+            newCollected.addAll(sim.collectedNodes);
+
+            double immediate = sim.dataCollected * DATA_VALUE;
+
+            double future = getBestFutureScore(
+                    graph,
+                    sim.endNode,
+                    depthLeft - 1,
+                    newCollected
+            );
+
+            maxFuture = Math.max(maxFuture, immediate + future);
+        }
+
+        return maxFuture;
+    }
+
+    
+
     public Direction getBestDirection(BoardGraph graph) {
         GraphNode playerNode = graph.getPlayerNode();
         Direction bestDir = null;
